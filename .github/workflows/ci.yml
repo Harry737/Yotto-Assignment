@@ -12,6 +12,7 @@ on:
 permissions:
   contents: write
   packages: write
+  
 
 env:
   REGISTRY: docker.io
