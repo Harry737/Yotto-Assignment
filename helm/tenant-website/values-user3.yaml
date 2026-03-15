@@ -1,2 +1,5 @@
 tenantName: "user3"
 domain: "user3.example.com"
+
+image:
+  tag: "latest"

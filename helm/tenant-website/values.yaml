@@ -2,7 +2,7 @@ tenantName: "default"
 domain: "default.example.com"
 
 image:
-  repository: "docker.io/yourusername/tenant-website"
+  repository: "docker.io/harishdsrc/tenant-website"
   tag: "latest"
   pullPolicy: IfNotPresent
 

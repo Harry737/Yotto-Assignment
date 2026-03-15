@@ -64,7 +64,7 @@ jobs:
 
           # Update each tenant's values file
           for tenant in user1 user2 user3; do
-            sed -i "s|  tag: .*|  tag: \"$IMAGE_TAG\"|" helm/tenant-website/values-${tenant}.yaml
+            sed -i "s|tag: \".*\"|tag: \"$IMAGE_TAG\"|" helm/tenant-website/values-${tenant}.yaml
             echo "✓ Updated values-${tenant}.yaml with tag: $IMAGE_TAG"
           done
 
