@@ -3,11 +3,15 @@ name: Build, Push & Deploy
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - 'apps/website/**'
       - 'helm/tenant-website/**'
       - '.github/workflows/ci.yml'
+
+permissions:
+  contents: write
+  packages: write
 
 env:
   REGISTRY: docker.io
@@ -79,7 +83,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "ci: update image tag to ${{ needs.build-and-push.outputs.image_tag }}"
-            git push origin main
+            git push origin master
             echo "✓ Pushed updated Helm values"
           fi
 
