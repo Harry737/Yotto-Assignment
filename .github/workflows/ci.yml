@@ -3,7 +3,7 @@ name: Build, Push & Deploy
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'apps/website/**'
       - 'helm/tenant-website/**'
@@ -46,7 +46,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Image digest
-        run: echo "Built and pushed image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+        run: |
+          echo "Built and pushed image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
 
   update-helm-values:
     needs: build-and-push
@@ -82,95 +83,95 @@ jobs:
             echo "✓ Pushed updated Helm values"
           fi
 
-  notify-kafka:
-    needs: update-helm-values
-    runs-on: ubuntu-latest
-    if: success()
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # notify-kafka:
+  #   needs: update-helm-values
+  #   runs-on: ubuntu-latest
+  #   if: success()
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
 
-      - name: Install dependencies
-        run: |
-          cd kafka/consumer
-          npm ci
+  #     - name: Install dependencies
+  #       run: |
+  #         cd kafka/consumer
+  #         npm ci
 
-      - name: Publish deployment event
-        run: |
-          cd kafka/consumer
-          node notify.js \
-            --event DeploymentTriggered \
-            --tenant multi-tenant \
-            --version "${{ needs.build-and-push.outputs.image_tag }}"
-        env:
-          KAFKA_BROKER: localhost:9092
-        continue-on-error: true
+  #     - name: Publish deployment event
+  #       run: |
+  #         cd kafka/consumer
+  #         node notify.js \
+  #           --event DeploymentTriggered \
+  #           --tenant multi-tenant \
+  #           --version "${{ needs.build-and-push.outputs.image_tag }}"
+  #       env:
+  #         KAFKA_BROKER: localhost:9092
+  #       continue-on-error: true
 
-  verify-deployment:
-    needs: update-helm-values
-    runs-on: self-hosted
-    if: success()
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # verify-deployment:
+  #   needs: update-helm-values
+  #   runs-on: self-hosted
+  #   if: success()
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Verify deployment status
-        run: |
-          echo "Waiting for ArgoCD to sync..."
-          sleep 5
+  #     - name: Verify deployment status
+  #       run: |
+  #         echo "Waiting for ArgoCD to sync..."
+  #         sleep 5
 
-          for tenant in user1 user2 user3; do
-            echo "Checking deployment for $tenant..."
-            kubectl rollout status deployment/${tenant}-tenant-website -n ${tenant} --timeout=120s || true
-          done
+  #         for tenant in user1 user2 user3; do
+  #           echo "Checking deployment for $tenant..."
+  #           kubectl rollout status deployment/${tenant}-tenant-website -n ${tenant} --timeout=120s || true
+  #         done
 
-      - name: Check pod status
-        run: |
-          echo "Pod status:"
-          kubectl get pods -n user1 -n user2 -n user3 -o wide || true
+  #     - name: Check pod status
+  #       run: |
+  #         echo "Pod status:"
+  #         kubectl get pods -n user1 -n user2 -n user3 -o wide || true
 
-      - name: Publish success event
-        run: |
-          cd kafka/consumer
-          npm ci 2>/dev/null || true
-          node notify.js \
-            --event DeploymentSucceeded \
-            --tenant multi-tenant \
-            --version "${{ needs.build-and-push.outputs.image_tag }}"
-        env:
-          KAFKA_BROKER: localhost:9092
-        continue-on-error: true
+  #     - name: Publish success event
+  #       run: |
+  #         cd kafka/consumer
+  #         npm ci 2>/dev/null || true
+  #         node notify.js \
+  #           --event DeploymentSucceeded \
+  #           --tenant multi-tenant \
+  #           --version "${{ needs.build-and-push.outputs.image_tag }}"
+  #       env:
+  #         KAFKA_BROKER: localhost:9092
+  #       continue-on-error: true
 
-  rollback-on-failure:
-    needs: [build-and-push, update-helm-values]
-    runs-on: self-hosted
-    if: failure()
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # rollback-on-failure:
+  #   needs: [build-and-push, update-helm-values]
+  #   runs-on: self-hosted
+  #   if: failure()
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Rollback deployments
-        run: |
-          echo "Deployment failed, rolling back..."
+  #     - name: Rollback deployments
+  #       run: |
+  #         echo "Deployment failed, rolling back..."
 
-          for tenant in user1 user2 user3; do
-            echo "Rolling back $tenant..."
-            helm rollback ${tenant}-website -n ${tenant} 0 || true
-          done
+  #         for tenant in user1 user2 user3; do
+  #           echo "Rolling back $tenant..."
+  #           helm rollback ${tenant}-website -n ${tenant} 0 || true
+  #         done
 
-      - name: Publish rollback event
-        run: |
-          cd kafka/consumer
-          npm ci 2>/dev/null || true
-          node notify.js \
-            --event DeploymentRolledBack \
-            --tenant multi-tenant \
-            --version "${{ needs.build-and-push.outputs.image_tag }}"
-        env:
-          KAFKA_BROKER: localhost:9092
-        continue-on-error: true
+  #     - name: Publish rollback event
+  #       run: |
+  #         cd kafka/consumer
+  #         npm ci 2>/dev/null || true
+  #         node notify.js \
+  #           --event DeploymentRolledBack \
+  #           --tenant multi-tenant \
+  #           --version "${{ needs.build-and-push.outputs.image_tag }}"
+  #       env:
+  #         KAFKA_BROKER: localhost:9092
+  #       continue-on-error: true
