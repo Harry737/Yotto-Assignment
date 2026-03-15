@@ -3,7 +3,7 @@ name: Build, Push & Deploy
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'apps/website/**'
       - 'helm/tenant-website/**'
@@ -12,7 +12,6 @@ on:
 permissions:
   contents: write
   packages: write
-  
 
 env:
   REGISTRY: docker.io
