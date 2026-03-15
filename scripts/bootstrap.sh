@@ -149,14 +149,11 @@ echo "✓ ArgoCD installed"
 # Phase 9: Create ApplicationSet
 log_step "Creating ApplicationSet for multi-tenant deployments..."
 
-# Get the current repo URL from git (assuming this repo is on GitHub)
-REPO_URL=$(cd "$PROJECT_DIR" && git config --get remote.origin.url || echo "https://github.com/YOUR_ORG/YOUR_REPO.git")
-
-# Create a version of the ApplicationSet with the repo URL embedded
-sed "s|'{{ .repo.url }}'|'$REPO_URL'|g" "$PROJECT_DIR/argocd/applicationset.yaml" | kubectl apply -f -
+# Apply the ApplicationSet directly
+kubectl apply -f "$PROJECT_DIR/argocd/applicationset.yaml"
 
 echo "✓ ApplicationSet created"
-echo "  Repository: $REPO_URL"
+echo "  Repository: https://github.com/Harry737/Yotto-Assignment.git"
 
 # Phase 10: Start Kafka
 log_step "Starting Kafka..."

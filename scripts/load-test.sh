@@ -49,7 +49,9 @@ sleep 3
 
 echo ""
 echo "[Load Test Output]"
-hey -n "$REQUESTS" -c "$CONCURRENCY" -t 30 --insecure "https://$DOMAIN/"
+# Use HTTP instead (self-signed cert issue with hey)
+# Or use -H to override Host header with IP
+hey -n "$REQUESTS" -c "$CONCURRENCY" -t 30 "http://$DOMAIN/"
 
 echo ""
 echo "=========================================="

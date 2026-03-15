@@ -16,19 +16,19 @@ spec:
         namespace: user3
   template:
     metadata:
-      name: '{{ .tenant }}-website'
+      name: '{{.tenant}}-website'
     spec:
       project: default
       source:
-        repoURL: '{{ .repo.url }}'
+        repoURL: https://github.com/Harry737/Yotto-Assignment.git
         targetRevision: HEAD
         path: helm/tenant-website
         helm:
           valueFiles:
-          - 'values-{{ .tenant }}.yaml'
+          - 'values-{{.tenant}}.yaml'
       destination:
         server: https://kubernetes.default.svc
-        namespace: '{{ .namespace }}'
+        namespace: '{{.namespace}}'
       syncPolicy:
         automated:
           prune: true
