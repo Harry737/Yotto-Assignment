@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: domain-registry
+  namespace: ingress-nginx
+  labels:
+    app: ingress-nginx
+data:
+  registry.txt: |
+    # Domain to Tenant Mapping Registry
+    # Format: domain.com = namespace/tenant-name
+
+    user1.example.com = user1/user1-tenant-website
+    user2.example.com = user2/user2-tenant-website
+    user3.example.com = user3/user3-tenant-website
+
+    # To add a new user domain:
+    # 1. Add entry here
+    # 2. Push values-userN-siteM.yaml to helm/tenant-website/
+    # 3. ArgoCD will auto-deploy and create Ingress
+    # 4. Update /etc/hosts (or CoreDNS) with domain → 127.0.0.1

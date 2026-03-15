@@ -1,0 +1,44 @@
+tenantName: "default"
+domain: "default.example.com"
+
+image:
+  repository: "docker.io/yourusername/tenant-website"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+kafka:
+  broker: "172.17.0.1:9092"
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuUtilization: 60
+  memoryUtilization: 70
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+tls:
+  enabled: true
+  issuerName: "selfsigned-issuer"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

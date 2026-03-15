@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tenant-websites
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+  - list:
+      elements:
+      - tenant: user1
+        namespace: user1
+      - tenant: user2
+        namespace: user2
+      - tenant: user3
+        namespace: user3
+  template:
+    metadata:
+      name: '{{ .tenant }}-website'
+    spec:
+      project: default
+      source:
+        repoURL: '{{ .repo.url }}'
+        targetRevision: HEAD
+        path: helm/tenant-website
+        helm:
+          valueFiles:
+          - 'values-{{ .tenant }}.yaml'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ .namespace }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

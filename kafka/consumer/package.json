@@ -1,0 +1,16 @@
+{
+  "name": "kafka-consumer",
+  "version": "1.0.0",
+  "description": "Kafka event consumer and publisher for Yotto platform",
+  "main": "consumer.js",
+  "scripts": {
+    "start": "node consumer.js",
+    "notify": "node notify.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  }
+}

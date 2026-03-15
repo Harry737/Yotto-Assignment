@@ -1,0 +1,33 @@
+---
+# Step 1: Bootstrap self-signed issuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+spec:
+  selfSigned: {}
+
+---
+# Step 2: Create CA certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: yotto-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: yotto-ca
+  secretName: yotto-ca-secret
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+
+---
+# Step 3: Real issuer backed by the CA
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  ca:
+    secretName: yotto-ca-secret

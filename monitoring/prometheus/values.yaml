@@ -1,0 +1,36 @@
+prometheus-community/kube-prometheus-stack:
+  grafana:
+    adminPassword: "admin123"
+    service:
+      type: NodePort
+      nodePort: 32000
+    sidecar:
+      dashboards:
+        enabled: true
+        searchNamespace: ALL
+      datasources:
+        enabled: true
+        defaultDatasourceEnabled: true
+        searchNamespace: ALL
+
+  prometheus:
+    prometheusSpec:
+      service:
+        type: NodePort
+        nodePort: 32001
+      podMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+      retention: 24h
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+  alertmanager:
+    enabled: false
+
+  prometheus-node-exporter:
+    enabled: true

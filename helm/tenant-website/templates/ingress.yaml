@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "tenant-website.fullname" . }}
+  labels:
+    {{- include "tenant-website.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    {{- if .Values.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.tls.issuerName | quote }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- end }}
+spec:
+  ingressClassName: nginx
+  {{- if .Values.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ .Values.domain | quote }}
+    secretName: {{ include "tenant-website.fullname" . }}-tls
+  {{- end }}
+  rules:
+  - host: {{ .Values.domain | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "tenant-website.fullname" . }}
+            port:
+              number: 80
