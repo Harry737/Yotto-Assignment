@@ -6,7 +6,6 @@ on:
       - master
     paths:
       - 'apps/website/**'
-      - 'helm/tenant-website/**'
       - '.github/workflows/ci.yml'
 
 permissions:
