@@ -18,15 +18,15 @@ A complete DevOps solution for deploying and managing multiple isolated websites
 
 ### Multi-Tenancy Model
 
-- **3 Tenants**: user1, user2, user3
+- **5 Tenants**: user1, user2, user3, user4, user5 (user4-5 created dynamically)
 - **Isolation**: Each tenant has its own Kubernetes namespace with:
   - Network Policies (ingress-nginx → pod traffic only)
-  - Resource Quotas (CPU/memory limits per tenant)
-  - RBAC (future: per-tenant service accounts)
-- **Scalability**: Each tenant can deploy multiple independent websites
-  - Example: user1-site1, user1-site2, user1-site3
-  - New sites deployed via git push (values-user1-siteN.yaml)
-  - ArgoCD automatically detects and deploys new sites
+  - Resource Quotas (2 CPU, 2Gi memory per tenant)
+  - Service accounts per namespace
+- **Dynamic Tenant Creation**: Add new tenants via script without cluster redeploy
+  - Example: `bash scripts/create-tenant.sh user6`
+  - Takes ~2 minutes to deploy
+  - Uses ApplicationSet list generator for GitOps
 
 ## 🚀 Quick Start
 
@@ -57,12 +57,13 @@ sudo bash scripts/setup-hosts.sh
 ```
 
 The bootstrap script will:
-- Create a kind cluster with 3 nodes
+- Create a kind cluster with 3 nodes (1 control-plane, 2 workers)
 - Install ingress-nginx, cert-manager, metrics-server
-- Create 3 tenant namespaces with resource quotas
-- Install ArgoCD for GitOps deployments
-- Start Kafka + initialize topics
-- Install kube-prometheus-stack for monitoring
+- Create 5 tenant namespaces (user1-5) with resource quotas
+- Install ArgoCD with ApplicationSet for GitOps
+- Deploy all 5 tenants via Helm chart
+- Start Kafka (Docker Compose) with topic initialization
+- Install Prometheus + Grafana for monitoring
 
 ### Verify Deployment
 
@@ -70,31 +71,41 @@ The bootstrap script will:
 # Check all resources across tenants
 bash scripts/verify-deployment.sh
 
-# Or manually:
+# Or manually - check all 5 tenants:
 kubectl get all -n user1
 kubectl get all -n user2
 kubectl get all -n user3
+kubectl get all -n user4
+kubectl get all -n user5
+
+# Check ApplicationSet status
+kubectl get applicationset -n argocd
 ```
 
-### Access Services
+### Access Services (from WSL)
 
 ```bash
-# Test a website
+# Port-forward to access from Windows browser
+# In WSL terminal, find your WSL IP:
+wsl hostname -I
+
+# Then forward services:
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 80:80 443:443 --address 172.24.160.103 &
+kubectl port-forward -n monitoring svc/grafana 3000:80 --address 172.24.160.103 &
+kubectl port-forward -n argocd svc/argocd-server 6443:443 --address 172.24.160.103 &
+
+# Test websites (add to hosts file: 127.0.0.1 user1.example.com, etc.)
 curl -k https://user1.example.com
 
-# ArgoCD UI (get admin password first)
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d
-# Then visit: https://localhost:32002
-
 # Grafana Dashboard
-# Visit: http://localhost:32000
-# Login: admin / admin123
+# Visit: http://172.24.160.103:3000
+# Login: admin / admin
 
-# Prometheus
-# Visit: http://localhost:32001
+# ArgoCD UI
+# Visit: https://172.24.160.103:6443
+# Get password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 
-# Watch pods scaling
+# Watch HPA scaling
 kubectl get hpa -n user1 -w
 ```
 
@@ -132,11 +143,11 @@ kubectl top pods -n user1
 
 Triggered on `git push` to `main` branch:
 
-1. **Build Phase**: Docker build + push to Docker Hub (tagged with git SHA)
-2. **Update Phase**: Update Helm values files with new image tag
-3. **Sync Phase**: ArgoCD auto-syncs and deploys to all 3 tenants
-4. **Verify Phase**: (Self-hosted runner) Confirm pod rollout status
-5. **Event Phase**: Publish deployment events to Kafka
+1. **build-and-push**: Docker build + push to Docker Hub (tagged with git SHA)
+2. **update-helm-values**: Dynamically update ALL values-*.yaml files with new tag (works for unlimited tenants)
+3. **verify-deployment**: Wait for rollout, check pod readiness across all tenants
+4. **rollback-on-failure**: Auto-rollback if verification fails, publish DeploymentRolledBack event
+5. **Event publishing**: Publish DeploymentSucceeded event to Kafka with version info
 
 ### Setup GitHub Actions
 
@@ -164,72 +175,89 @@ If deployment fails, the pipeline automatically:
 helm rollback user1-website -n user1
 ```
 
-## 🎯 Dynamic Domain Mapping & Multi-Website Deployment
+## 🎯 Dynamic Tenant Creation & Domain Mapping
 
-### Add a New Website for a Tenant
+### Add a New Tenant (user4, user5, etc.)
 
-**Scenario**: User1 wants to deploy a second website (user1-site2)
+**Simplest way** (recommended):
 
 ```bash
-# 1. Create a new values file
-cat > helm/tenant-website/values-user1-site2.yaml <<EOF
-tenantName: "user1-site2"
-domain: "user1-site2.example.com"
-# All other settings inherit from values.yaml
-EOF
+# Create new tenant in 2 minutes, zero downtime
+bash scripts/create-tenant.sh user4
 
-# 2. Add domain to /etc/hosts (or CoreDNS)
-echo "127.0.0.1  user1-site2.example.com" | sudo tee -a /etc/hosts
+# What it does:
+# 1. Creates values-user4.yaml
+# 2. Adds user4 to ApplicationSet
+# 3. Creates user4 namespace
+# 4. Creates ResourceQuota
+# 5. Pushes to git
+# 6. Waits for ArgoCD sync
+# 7. Verifies pods running
+```
 
-# 3. Update domain registry ConfigMap (optional, for documentation)
-kubectl edit cm domain-registry -n ingress-nginx
+**Manual approach** (if you understand the flow):
 
-# 4. Push to git
-git add helm/tenant-website/values-user1-site2.yaml
-git commit -m "feat: add user1-site2 website"
+```bash
+# 1. Create new values file for new tenant
+cp helm/tenant-website/values-user1.yaml helm/tenant-website/values-user4.yaml
+# Edit: change tenantName, domain, image tag to match new tenant
+
+# 2. Add tenant to ApplicationSet list
+kubectl edit applicationset tenant-websites -n argocd
+# Add: - tenant: user4 to the list
+
+# 3. Create namespace and quota
+kubectl create namespace user4
+kubectl apply -f k8s/resource-quotas/user4-quota.yaml
+
+# 4. Push to git (triggers ArgoCD sync)
+git add helm/tenant-website/values-user4.yaml argocd/applicationset.yaml
+git commit -m "feat: add user4 tenant"
 git push origin main
 ```
 
-ArgoCD will automatically:
-- Detect the new values file
-- Create a new Helm Application (via ApplicationSet file generator)
-- Deploy a new Deployment, Service, Ingress, HPA, PDB in the `user1` namespace
-- issue TLS cert via cert-manager
-- Expose at `https://user1-site2.example.com` (~30 seconds)
+### How Dynamic Domain Mapping Works
 
-### How It Works
+**Traditional approach** (❌ requires cluster redeploy):
+- Hardcoded domains in Ingress
+- Every new domain requires code change + redeploy
+- Downtime and complexity
 
-**Traditional approach**: Redeploy entire cluster for new domain ❌
+**Our approach** (✅ zero downtime):
+1. ApplicationSet uses template: `{{.tenant}}.example.com`
+2. No hardcoding - works for any tenant
+3. Helm renders domain dynamically from values
+4. Ingress created automatically
+5. cert-manager provisions TLS cert
+6. Service live in ~30 seconds after git push
 
-**Our approach**:
-1. ingress-nginx watches Ingress objects cluster-wide
-2. When a new Ingress is created, ingress-nginx reloads its config (~30s)
-3. No pod restarts, no cluster redeploy, zero downtime ✅
-
-See [docs/dynamic-domain-mapping.md](docs/dynamic-domain-mapping.md) for detailed explanation.
+See [docs/dynamic-domain-mapping.md](docs/dynamic-domain-mapping.md) for technical deep-dive.
 
 ## 📈 Observability & Monitoring
 
 ### Prometheus Metrics
 
 The platform automatically collects:
-- Pod CPU, memory, network I/O
-- HTTP request duration (from /metrics endpoint)
-- HPA scaling events
-- Kubernetes control-plane metrics
+- Pod CPU and memory usage
+- HPA replica counts and scaling events
+- Kubernetes node metrics
+- HTTP request metrics from /metrics endpoint
+- Prometheus self-monitoring
 
-### Grafana Dashboards
+### Grafana Dashboards (4 Panels)
 
-Pre-installed dashboards:
-- Kubernetes Cluster Overview
-- Pod CPU/Memory Usage
-- HTTP Request Metrics (per tenant)
+Pre-installed custom dashboard shows:
+1. **HPA Current Replicas** - Shows scaling from 2 to 10 during load
+2. **Memory Usage per Tenant** - Tracks baseline (~100-200MB) vs peak usage
+3. **Pods per Tenant** - Visualizes replica scaling
+4. **CPU Usage per Tenant** - Shows 0% baseline to 400%+ under load
 
-**Custom dashboard**: Deployed automatically via values.yaml
+**Access**: Grafana on http://172.24.160.103:3000
+**Default login**: admin / admin
 
 ### Service Monitors
 
-The Helm chart includes a `ServiceMonitor` for Prometheus auto-discovery. No manual scrape config needed.
+The platform uses Prometheus `ServiceMonitor` CRD for auto-discovery. Metrics are collected automatically without manual scrape config.
 
 ## 🔐 Security Features
 
@@ -252,9 +280,16 @@ Each tenant's pods can only:
 
 ### Resource Limits
 
+**Per Pod**:
 - **CPU**: 500m (limit) / 100m (request)
-- **Memory**: 256Mi (limit) / 128Mi (request)
-- **Enforced via**: ResourceQuota per namespace
+- **Memory**: 512Mi (limit) / 128Mi (request)
+
+**Per Namespace Quota**:
+- **Total CPU**: 2 cores max
+- **Total Memory**: 2Gi max
+- **Pod limit**: 10 pods per namespace
+
+**Enforced via**: ResourceQuota + LimitRange per namespace
 
 ### TLS Certificates
 
@@ -264,39 +299,55 @@ Each tenant's pods can only:
 
 ## 📝 Kafka Event Streaming
 
-### Event Topics
+### Event Topics & Types
 
 **Topic**: `website-events`
+
+**Event Types Published**:
+- **WebsiteCreated**: When pod starts, publishes from app
+- **DeploymentTriggered**: CI/CD pipeline starts
+- **DeploymentSucceeded**: After verify-deployment job (all pods ready)
+- **DeploymentRolledBack**: When rollback-on-failure job executes
 
 **Event Schema**:
 ```json
 {
-  "event": "WebsiteCreated|DeploymentTriggered|DeploymentSucceeded|DeploymentRolledBack",
+  "event": "DeploymentSucceeded",
   "tenant": "user1",
-  "domain": "user1.example.com",
-  "timestamp": "2024-03-15T10:30:00Z",
+  "timestamp": "2026-03-16T10:30:00Z",
   "version": "sha-abc123def456"
 }
 ```
 
-### Subscribe to Events
+### Verify Events
 
 ```bash
-# Start consumer
+# Start consumer (in new terminal)
 cd kafka/consumer
 npm ci
 node consumer.js
 
-# Output: prints all events real-time
+# Output: Listens for all events in real-time
+# When deployment happens: "Event received: DeploymentSucceeded"
 ```
 
-### Publish Events (Manual)
+### Publish Events Manually
 
 ```bash
 node kafka/consumer/notify.js \
-  --event CustomEvent \
+  --event DeploymentSucceeded \
   --tenant user1 \
-  --version v1.0.0
+  --version sha-abc123def456
+```
+
+### Kafka Access
+
+```bash
+# Check Kafka is running
+docker-compose -f kafka/docker-compose.yml ps
+
+# Connect to Kafka broker: 172.17.0.1:9092 (from pods)
+# From host: localhost:9092
 ```
 
 ## 🛠️ Troubleshooting
@@ -422,5 +473,6 @@ DevOps Team - Yotto Assignment
 
 ---
 
-**Last Updated**: March 2024
+**Last Updated**: March 16, 2026
 **Version**: 1.0.0
+**Status**: Production Ready

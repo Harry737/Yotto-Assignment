@@ -59,9 +59,9 @@ app.get('/', (req, res) => {
         <div class="info">
           <p><strong>Tenant:</strong> ${tenantName}</p>
           <p><strong>Domain:</strong> ${domain}</p>
-          <p><strong>Version1:</strong> ${process.env.VERSION || 'dev'}</p>
+          <p><strong>Version:</strong> ${process.env.VERSION || 'dev'}</p>
         </div>
-        <p>This is a multi-tenant website running on Kubernetes.</p>
+        <p>This is a multi-tenant website running on Kubernetes</p>
       </div>
     </body>
     </html>
