@@ -83,7 +83,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "ci: update image tag to ${{ needs.build-and-push.outputs.image_tag }}"
-            git push origin main
+            git push origin master
             echo "✓ Pushed updated Helm values"
           fi
 
