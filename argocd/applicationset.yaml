@@ -14,6 +14,8 @@ spec:
         namespace: user2
       - tenant: user3
         namespace: user3
+      - tenant: user4
+        namespace: user4
   template:
     metadata:
       name: '{{.tenant}}-website'

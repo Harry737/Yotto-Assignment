@@ -1,0 +1,5 @@
+tenantName: "user4"
+domain: "user4.example.com"
+
+image:
+  tag: "sha-de31ec002afd7f6c718bb2ad1e1c004124588a2f"
