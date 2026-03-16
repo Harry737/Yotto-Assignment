@@ -20,7 +20,7 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -55,7 +55,7 @@ jobs:
 
   update-helm-values:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -83,9 +83,73 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "ci: update image tag to ${{ needs.build-and-push.outputs.image_tag }}"
-            git push origin master
+            git push origin main
             echo "✓ Pushed updated Helm values"
           fi
+
+  verify-deployment:
+    needs: update-helm-values
+    runs-on: self-hosted
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify deployment status
+        run: |
+          echo "Waiting for ArgoCD to sync..."
+          sleep 10
+
+          for tenant in user1 user2 user3; do
+            echo "Checking deployment for $tenant..."
+            kubectl rollout status deployment/${tenant}-website-tenant-website -n ${tenant} --timeout=120s || true
+          done
+
+      - name: Check pod status
+        run: |
+          echo "Pod status:"
+          kubectl get pods -n user1 -n user2 -n user3 -o wide || true
+
+      - name: Publish deployment event
+        run: |
+          cd kafka/consumer
+          npm ci 2>/dev/null || true
+          node notify.js \
+            --event DeploymentSucceeded \
+            --tenant multi-tenant \
+            --version "${{ needs.build-and-push.outputs.image_tag }}"
+        env:
+          KAFKA_BROKER: "172.17.0.1:9092"
+        continue-on-error: true
+
+  rollback-on-failure:
+    needs: [build-and-push, update-helm-values]
+    runs-on: self-hosted
+    if: failure()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Rollback deployments
+        run: |
+          echo "Deployment failed, rolling back..."
+
+          for tenant in user1 user2 user3; do
+            echo "Rolling back $tenant..."
+            kubectl rollout undo deployment/${tenant}-website-tenant-website -n ${tenant} || true
+          done
+
+      - name: Publish rollback event
+        run: |
+          cd kafka/consumer
+          npm ci 2>/dev/null || true
+          node notify.js \
+            --event DeploymentRolledBack \
+            --tenant multi-tenant \
+            --version "${{ needs.build-and-push.outputs.image_tag }}"
+        env:
+          KAFKA_BROKER: "172.17.0.1:9092"
+        continue-on-error: true
 
   # notify-kafka:
   #   needs: update-helm-values
