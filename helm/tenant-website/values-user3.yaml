@@ -2,4 +2,4 @@ tenantName: "user3"
 domain: "user3.example.com"
 
 image:
-  tag: "sha-12ad52e03572e2f8c6a8b62f31c85e1d74223d2d"
+  tag: "sha-de31ec002afd7f6c718bb2ad1e1c004124588a2f"
