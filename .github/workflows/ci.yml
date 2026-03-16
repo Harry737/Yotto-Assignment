@@ -66,10 +66,12 @@ jobs:
         run: |
           IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
 
-          # Update each tenant's values file
-          for tenant in user1 user2 user3; do
-            sed -i "s|tag: \".*\"|tag: \"$IMAGE_TAG\"|" helm/tenant-website/values-${tenant}.yaml
-            echo "✓ Updated values-${tenant}.yaml with tag: $IMAGE_TAG"
+          # Update all tenant values files dynamically
+          for file in helm/tenant-website/values-*.yaml; do
+            if [ -f "$file" ]; then
+              sed -i "s|tag: \".*\"|tag: \"$IMAGE_TAG\"|" "$file"
+              echo "✓ Updated $(basename $file) with tag: $IMAGE_TAG"
+            fi
           done
 
       - name: Commit and push changes
@@ -100,15 +102,18 @@ jobs:
           echo "Waiting for ArgoCD to sync..."
           sleep 10
 
-          for tenant in user1 user2 user3; do
-            echo "Checking deployment for $tenant..."
-            kubectl rollout status deployment/${tenant}-website-tenant-website -n ${tenant} --timeout=120s || true
+          # Get all tenant namespaces dynamically
+          for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}' | grep -E '^(user|tenant)'); do
+            if kubectl get deployment -n "$ns" -o name | grep -q tenant-website; then
+              echo "Checking deployment in namespace: $ns..."
+              kubectl rollout status deployment -n "$ns" -l app.kubernetes.io/name=tenant-website --timeout=120s || true
+            fi
           done
 
       - name: Check pod status
         run: |
-          echo "Pod status:"
-          kubectl get pods -n user1 -n user2 -n user3 -o wide || true
+          echo "Pod status across all tenants:"
+          kubectl get pods -o wide --all-namespaces -l app.kubernetes.io/name=tenant-website || true
 
       - name: Publish deployment event
         run: |
@@ -132,11 +137,14 @@ jobs:
 
       - name: Rollback deployments
         run: |
-          echo "Deployment failed, rolling back..."
+          echo "Deployment failed, rolling back all tenant deployments..."
 
-          for tenant in user1 user2 user3; do
-            echo "Rolling back $tenant..."
-            kubectl rollout undo deployment/${tenant}-website-tenant-website -n ${tenant} || true
+          # Rollback all tenant deployments dynamically
+          for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}' | grep -E '^(user|tenant)'); do
+            if kubectl get deployment -n "$ns" -o name | grep -q tenant-website; then
+              echo "Rolling back deployments in namespace: $ns..."
+              kubectl rollout undo deployment -n "$ns" -l app.kubernetes.io/name=tenant-website || true
+            fi
           done
 
       - name: Publish rollback event
