@@ -123,8 +123,28 @@ else
   echo -e "${GREEN}✓ Pushed to repository${NC}"
 fi
 
+# Step 8.5: Wait for ArgoCD to create Application from ApplicationSet
+echo -e "${BLUE}Step 8.5: Waiting for ArgoCD to create Application...${NC}"
+TIMEOUT=60
+ELAPSED=0
+while [ $ELAPSED -lt $TIMEOUT ]; do
+  if kubectl get application ${TENANT_NAME}-website -n argocd &>/dev/null; then
+    echo -e "${GREEN}✓ Application ${TENANT_NAME}-website created by ArgoCD${NC}"
+    break
+  fi
+  echo -e "${BLUE}Waiting for Application creation... ($ELAPSED/$TIMEOUT seconds)${NC}"
+  sleep 3
+  ELAPSED=$((ELAPSED + 3))
+done
+
+if [ $ELAPSED -ge $TIMEOUT ]; then
+  echo -e "${BLUE}⚠ Application not auto-created, applying ApplicationSet manually...${NC}"
+  kubectl apply -f "$PROJECT_DIR/argocd/applicationset.yaml"
+  sleep 5
+fi
+
 # Step 9: Wait for ArgoCD sync
-echo -e "${BLUE}Step 8: Waiting for ArgoCD to sync...${NC}"
+echo -e "${BLUE}Step 9: Waiting for ArgoCD to sync...${NC}"
 echo -e "${BLUE}This may take 30-60 seconds...${NC}"
 sleep 10
 
